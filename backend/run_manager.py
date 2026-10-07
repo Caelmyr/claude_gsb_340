@@ -115,9 +115,15 @@ class RunManager:
                 raise RuntimeError("该运行未载入内存（服务器重启后不可续跑），请重开新运行")
             if meta["status"] in ("finished", "stopped"):
                 meta["status"] = "ready"
+            # Interventions scheduled at step 0 act on the initial state
+            # (idempotent: already-applied ones are skipped).
+            if engine.step_count == 0:
+                self._apply_due(run_id, engine, meta, 0)
             for _ in range(int(n)):
-                self._apply_due(run_id, engine, meta, engine.step_count)
                 engine.step()
+                # Due interventions apply the moment their step is reached,
+                # before the next step's dynamics — matching replay semantics.
+                self._apply_due(run_id, engine, meta, engine.step_count)
                 meta["current_step"] = engine.step_count
                 meta["updated_at"] = util.now_iso()
                 storage.append_series(run_id, {"step": engine.step_count,
@@ -148,11 +154,14 @@ class RunManager:
 
             series = storage.load_series(run_id)
             self._abort.discard(run_id)
+            # Interventions scheduled at the current step (incl. step 0) act
+            # before advancing.
+            self._apply_due(run_id, engine, meta, engine.step_count)
             for _ in range(int(steps)):
                 if run_id in self._abort:
                     break
-                self._apply_due(run_id, engine, meta, engine.step_count)
                 engine.step()
+                self._apply_due(run_id, engine, meta, engine.step_count)
                 meta["current_step"] = engine.step_count
                 series.append({"step": engine.step_count, **engine.stats()})
                 if engine.step_count % meta["snapshot_interval"] == 0:

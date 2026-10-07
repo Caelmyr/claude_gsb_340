@@ -90,6 +90,29 @@ def generate_report(run_id: str) -> Dict[str, Any]:
     domain = meta["domain"]
 
     metrics = _metric_rows(domain, series)
+    attribution_doc = storage.load_attribution(run_id)
+    if attribution_doc:
+        primary = attribution_doc.get("primary_target")
+        pres = (attribution_doc.get("results") or {}).get(primary)
+        if pres:
+            top = sorted(pres.get("interventions", []),
+                         key=lambda x: x.get("rank", 99))
+            if top:
+                best = top[0]
+                lines_pre = [
+                    f"干预归因：干预包使{pres['target']['label']}"
+                    f"相对无干预基线变化 {pres.get('relative_benefit')}。",
+                    f"贡献最大的干预为「{best['label']}」"
+                    f"（Shapley 相对份额 {best.get('shapley_relative')}，"
+                    f"判定 {best.get('strength')}/{best.get('stability')}）；"
+                    "详见“干预归因”页的对照表与交互分析。",
+                ]
+            else:
+                lines_pre = []
+        else:
+            lines_pre = []
+    else:
+        lines_pre = []
     report = {
         "run_id": run_id,
         "name": meta["name"],
@@ -101,7 +124,8 @@ def generate_report(run_id: str) -> Dict[str, Any]:
         "config": meta["config"],
         "metrics": metrics,
         "events": events,
-        "summary": _narrative(domain, metrics, len(series)),
+        "has_attribution": bool(attribution_doc),
+        "summary": lines_pre + _narrative(domain, metrics, len(series)),
         "generated_at": util.now_iso(),
     }
     storage.save_report(run_id, report)

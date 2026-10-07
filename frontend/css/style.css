@@ -228,3 +228,8 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
 
 /* timeline slider */
 .timeline { width: 100%; margin: 12px 0; accent-color: var(--accent); }
+
+/* attribution: signed numbers */
+.pos { color: var(--green); }
+.neg { color: var(--red); }
+#rankTable td, #pairTable td { vertical-align: top; }

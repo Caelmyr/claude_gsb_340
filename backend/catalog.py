@@ -12,7 +12,7 @@ where ``type`` is one of ``int`` / ``float`` / ``bool`` / ``choice``.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 def _num(key: str, label: str, default: float, lo: float, hi: float,
@@ -145,6 +145,62 @@ EPIDEMIC_INTERVENTIONS = [
 ]
 
 # --------------------------------------------------------------------------- #
+# Intervention attribution targets
+#
+# Attribution needs an explicit notion of "which outcome do the interventions
+# get credited for?".  Each domain lists one or more *targets*: a series key
+# plus an aggregation feature and the desired direction.  ``primary`` is the
+# target used for ranking / verdicts; the rest are available in the same run
+# via a metric switcher.  ``aux`` features (e.g. peak timing) are reported as
+# baseline-vs-bundle deltas rather than attributed per intervention.
+#
+# A target entry is::
+#     {"key", "label", "series", "feature", "direction", "unit"}
+# feature ∈ {max, min, sum, mean, last}; direction ∈ {lower, higher}
+# --------------------------------------------------------------------------- #
+ATTRIBUTION_TARGETS: Dict[str, Dict[str, Any]] = {
+    "epidemic": {
+        "primary": "peak_infected",
+        "targets": [
+            {"key": "peak_infected", "label": "感染峰值",
+             "series": "infected", "feature": "max", "direction": "lower", "unit": "人"},
+            {"key": "total_infected", "label": "累计感染规模",
+             "series": "new_infections", "feature": "sum", "direction": "lower", "unit": "人"},
+            {"key": "peak_prevalence", "label": "感染率峰值",
+             "series": "prevalence", "feature": "max", "direction": "lower", "unit": ""},
+        ],
+        "aux": [
+            {"key": "peak_step", "label": "达峰时间",
+             "series": "infected", "feature": "argmax", "positive_good": True, "unit": "步"},
+        ],
+    },
+    "traffic": {
+        "primary": "mean_flow",
+        "targets": [
+            {"key": "mean_speed", "label": "平均速度（全程均值）",
+             "series": "mean_speed", "feature": "mean", "direction": "higher", "unit": ""},
+            {"key": "mean_flow", "label": "平均流量（全程均值）",
+             "series": "flow", "feature": "mean", "direction": "higher", "unit": ""},
+            {"key": "mean_stopped", "label": "平均停车比例",
+             "series": "stopped", "feature": "mean", "direction": "lower", "unit": ""},
+        ],
+        "aux": [],
+    },
+    "ecology": {
+        "primary": "final_rabbits",
+        "targets": [
+            {"key": "final_rabbits", "label": "期末兔子数量",
+             "series": "rabbits", "feature": "last", "direction": "higher", "unit": "只"},
+            {"key": "min_rabbits", "label": "兔子最低数量（防灭绝）",
+             "series": "rabbits", "feature": "min", "direction": "higher", "unit": "只"},
+            {"key": "final_foxes", "label": "期末狐狸数量",
+             "series": "foxes", "feature": "last", "direction": "higher", "unit": "只"},
+        ],
+        "aux": [],
+    },
+}
+
+# --------------------------------------------------------------------------- #
 # Aggregate metric labels (stats dict keys -> human labels)
 # --------------------------------------------------------------------------- #
 TRAFFIC_METRICS = [
@@ -248,3 +304,22 @@ def known_domain(domain: str) -> bool:
 
 def known_model(domain: str, model: str) -> bool:
     return known_domain(domain) and model in CATALOG[domain]["models"]
+
+
+def attribution_targets(domain: str) -> List[Dict[str, Any]]:
+    return ATTRIBUTION_TARGETS.get(domain, {}).get("targets", [])
+
+
+def attribution_aux(domain: str) -> List[Dict[str, Any]]:
+    return ATTRIBUTION_TARGETS.get(domain, {}).get("aux", [])
+
+
+def attribution_primary(domain: str) -> str:
+    return ATTRIBUTION_TARGETS.get(domain, {}).get("primary", "")
+
+
+def attribution_target(domain: str, key: str) -> Optional[Dict[str, Any]]:
+    for spec in attribution_targets(domain):
+        if spec["key"] == key:
+            return spec
+    return None

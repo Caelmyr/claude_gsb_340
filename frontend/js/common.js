@@ -7,6 +7,7 @@ const PAGES = [
   { file: "visualize.html", label: "实时可视化" },
   { file: "stats.html", label: "统计图表" },
   { file: "intervention.html", label: "干预措施" },
+  { file: "attribution.html", label: "干预归因" },
   { file: "replay.html", label: "回放与时间轴" },
   { file: "compare.html", label: "对比实验" },
   { file: "report.html", label: "报告生成" },

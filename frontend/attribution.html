@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>干预归因 · 复杂系统模拟仿真平台</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="topnav" id="topnav"></nav>
+  <main class="container">
+    <h1 class="page-title">干预归因</h1>
+    <p class="page-sub">用反事实模拟 + Shapley 值分摊，量化每个干预对关键指标的贡献、起效时间、相互放大/抵消与跨随机种子的稳定性。</p>
+
+    <div class="card">
+      <div class="row between">
+        <div class="row">
+          <select id="runSelect" style="max-width:380px"></select>
+          <label class="small muted" style="display:flex;align-items:center;gap:6px">
+            随机种子数
+            <select id="seedSel">
+              <option value="1">1（快，不评稳定性）</option>
+              <option value="3">3</option>
+              <option value="5" selected>5（推荐）</option>
+              <option value="7">7</option>
+              <option value="9">9</option>
+            </select>
+          </label>
+          <button class="btn primary" id="runBtn">开始归因分析</button>
+          <button class="btn danger small" id="abortBtn" style="display:none">取消</button>
+        </div>
+        <span class="muted small" id="jobStatus"></span>
+      </div>
+      <div id="progressWrap" style="display:none;margin-top:12px">
+        <div style="height:6px;background:var(--panel-2);border-radius:3px;overflow:hidden">
+          <div id="progressBar" style="height:100%;width:0;background:var(--accent);transition:width .2s"></div>
+        </div>
+        <p class="muted small" id="progressText" style="margin:6px 0 0"></p>
+      </div>
+      <p class="muted small" id="runInfo" style="margin:10px 0 0"></p>
+    </div>
+
+    <div id="body" style="display:none">
+      <div class="notice" id="notesBox" style="display:none"></div>
+
+      <div class="card">
+        <div class="row between">
+          <h2 style="margin:0">归因指标</h2>
+          <div class="row gap-6">
+            <select id="targetSel" style="max-width:260px"></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-4" id="kpis"></div>
+
+      <div class="card">
+        <h2>反事实曲线（主指标：基线 vs 实际干预包，中位数种子带）</h2>
+        <div id="curveChart" class="chart" style="height:340px"></div>
+        <div class="row" id="curveControls" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card">
+        <h2>干预 — 效果对照表与归因排序</h2>
+        <p class="muted small" style="margin:-4px 0 10px">
+          Shapley 贡献：把干预包总效果按所有出场顺序的平均边际贡献公平分摊（Σ=总效果）；
+          单独效果：只施加该干预相对无干预基线；起效滞后来自明确口径（见页脚说明）。
+        </p>
+        <div style="overflow-x:auto"><table id="rankTable"></table></div>
+      </div>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h2>干预之间：放大 / 抵消</h2>
+          <div style="overflow-x:auto"><table id="pairTable"></table></div>
+          <p class="muted small" id="pairNote" style="margin:10px 0 0"></p>
+        </div>
+        <div class="card">
+          <h2>稳定性与判定口径</h2>
+          <div id="stabilityBox"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>辅助指标（基线 → 干预包，不分摊）</h2>
+        <div style="overflow-x:auto"><table id="auxTable"></table></div>
+      </div>
+    </div>
+
+    <div id="emptyBox" class="card" style="display:none">
+      <p class="muted">该运行还没有归因结果。选择一个含干预措施、且已跑完的运行，点击「开始归因分析」。</p>
+    </div>
+  </main>
+
+  <script src="/vendor/echarts.min.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/attribution.js"></script>
+</body>
+</html>

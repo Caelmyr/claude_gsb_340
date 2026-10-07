@@ -15,6 +15,7 @@ from typing import Any, Dict
 from flask import Flask, jsonify, request, send_file, send_from_directory
 
 from . import catalog, export, models, report, storage, util
+from .attribution_jobs import attr_jobs
 from .run_manager import manager
 
 FRONTEND_DIR = os.path.join(
@@ -185,9 +186,11 @@ def create_app() -> Flask:
 
     @app.route("/api/runs/<run_id>/<action>", methods=["POST"])
     def run_action(run_id: str, action: str):
+        # Sub-resources with their own routes must never be captured here.
+        reserved = {"interventions", "attribution", "step", "batch"}
         actions = {"pause": manager.pause, "resume": manager.resume,
                    "stop": manager.stop, "reset": manager.reset}
-        if action not in actions:
+        if action in reserved or action not in actions:
             return _err(ValueError(f"unknown action: {action}"), 400)
         try:
             return jsonify(actions[action](run_id))
@@ -322,6 +325,61 @@ def create_app() -> Flask:
             return jsonify(report.generate_report(run_id))
         except KeyError as exc:
             return _err(exc, 404)
+
+    # ------------------------------------------------------------------ #
+    # Intervention attribution (counterfactual + Shapley)
+    # ------------------------------------------------------------------ #
+    @app.route("/api/attribution/targets")
+    def attribution_targets():
+        meta_domain = request.args.get("domain", "epidemic")
+        return jsonify({
+            "domains": {
+                d: {"primary": catalog.attribution_primary(d),
+                    "targets": catalog.attribution_targets(d),
+                    "aux": catalog.attribution_aux(d)}
+                for d in catalog.CATALOG
+            },
+            "domain": meta_domain,
+        })
+
+    @app.route("/api/runs/<run_id>/attribution", methods=["GET"])
+    def get_attribution(run_id: str):
+        if storage.load_run_meta(run_id) is None:
+            return _err(KeyError(f"run not found: {run_id}"), 404)
+        doc = storage.load_attribution(run_id)
+        if doc is None:
+            return _err(KeyError(f"attribution not found for run: {run_id}"), 404)
+        return jsonify(doc)
+
+    @app.route("/api/runs/<run_id>/attribution", methods=["POST", "DELETE"])
+    def run_attribution(run_id: str):
+        if request.method == "DELETE":
+            return jsonify({"aborted": bool(attr_jobs.abort(run_id))})
+        if storage.load_run_meta(run_id) is None:
+            return _err(KeyError(f"run not found: {run_id}"), 404)
+        data = _json()
+        n_seeds = max(1, min(9, int(data.get("seeds", 5))))
+        # Seeded offset scheme mirrors attribution.attribute_run defaults.
+        meta = storage.load_run_meta(run_id)
+        base_seed = int((meta or {}).get("seed", 0))
+        seeds = [base_seed + 2654435761 * i for i in range(n_seeds)]
+        steps = data.get("steps")
+        targets = data.get("targets")
+        try:
+            job = attr_jobs.start(run_id, seeds=seeds,
+                                  steps=int(steps) if steps is not None else None,
+                                  target_keys=targets)
+        except KeyError as exc:
+            return _err(exc, 404)
+        except ValueError as exc:
+            return _err(exc, 400)
+        return jsonify(job), 202
+
+    @app.route("/api/runs/<run_id>/attribution/status")
+    def attribution_status(run_id: str):
+        if storage.load_run_meta(run_id) is None:
+            return _err(KeyError(f"run not found: {run_id}"), 404)
+        return jsonify(attr_jobs.status(run_id))
 
     # ------------------------------------------------------------------ #
     # Export

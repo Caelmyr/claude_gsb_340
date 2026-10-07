@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from backend import models, report, run_manager, storage, util
+from backend import attribution, models, report, run_manager, storage, util
 
 
 def list_scenes() -> None:
@@ -46,6 +46,62 @@ def run_one(scene_id: str, steps: int, snapshot_interval: int,
     return 0
 
 
+def attribute_one(run_id: str, n_seeds: int, steps: int | None = None) -> int:
+    meta = storage.load_run_meta(run_id)
+    if meta is None:
+        print(f"error: run not found: {run_id}", file=sys.stderr)
+        return 1
+    base_seed = int(meta.get("seed", 0))
+    seeds = [base_seed + 2654435761 * i for i in range(max(1, n_seeds))]
+
+    last = [0]
+
+    def show(p):
+        if p["done"] != last[0]:
+            last[0] = p["done"]
+            print(f"\r  counterfactuals {p['done']}/{p['total']}", end="",
+                  file=sys.stderr)
+
+    doc = attribution.attribute_run(run_id, seeds=seeds, steps=steps,
+                                    progress=show)
+    storage.save_attribution(run_id, doc)
+    print(file=sys.stderr)
+    print(f"attribution {run_id}: method={doc['method']} "
+          f"seeds={doc['n_seeds']} simulations={doc['n_simulations']}")
+    primary = doc["primary_target"]
+    res = doc["results"][primary]
+    t_label = res["target"]["label"]
+    print(f"\n[{t_label}] 基线均值 {res['baseline'].get('mean')} → "
+          f"干预包 {res['bundle'].get('mean')}，"
+          f"相对收益 {pct(res['relative_benefit'])} "
+          f"(方向一致概率 {pct(res['prob_beneficial'])}, "
+          f"排名一致性 ρ={res['rank_concordance']})")
+    print(f"{'排名':<4}{'干预':<28}{'Shapley':>10}{'相对份额':>10}"
+          f"{'单独效果':>10}{'起效滞后':>8}  判定")
+    for row in sorted(res["interventions"], key=lambda r: r["rank"]):
+        lag = row["solo_lag_median"]
+        lag_s = "—" if lag is None else f"{lag:g}步"
+        print(f"{row['rank']:<4}{row['label'][:26]:<28}"
+              f"{row['shapley'].get('mean', 0):>10.2f}"
+              f"{pct(row['shapley_relative']):>10}"
+              f"{pct(row['solo_relative']):>10}{lag_s:>8}"
+              f"  {row['strength']}/{row['stability']}")
+    for p in res["interactions"]:
+        if p["classification"] != "additive":
+            print(f"  交互 [{p['label_i']} × {p['label_j']}]: "
+                  f"{p['classification']} (指数 {p['index'].get('mean')}, "
+                  f"相对 {pct(p['relative_mean'])})")
+    for note in doc["notes"]:
+        print(f"  note: {note}")
+    return 0
+
+
+def pct(v) -> str:
+    if v is None:
+        return "—"
+    return f"{v * 100:.1f}%"
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="Headless simulation batch runner")
     p.add_argument("--list", action="store_true", help="list available scenes")
@@ -54,16 +110,29 @@ def main() -> int:
     p.add_argument("--snapshot-interval", type=int, default=1,
                    help="persist a full snapshot every N steps")
     p.add_argument("--report", action="store_true", help="generate a report")
+    p.add_argument("--attribute", action="store_true",
+                   help="run intervention attribution after the batch run")
+    p.add_argument("--attribute-run",
+                   help="compute attribution for an existing run id")
+    p.add_argument("--seeds", type=int, default=5,
+                   help="number of random seeds for attribution (1-9)")
     args = p.parse_args()
 
     storage.ensure_dirs()
     if args.list:
         list_scenes()
         return 0
+    if args.attribute_run:
+        return attribute_one(args.attribute_run, args.seeds)
     if not args.scene:
         p.print_help()
         return 1
-    return run_one(args.scene, args.steps, args.snapshot_interval, args.report)
+    rc = run_one(args.scene, args.steps, args.snapshot_interval, args.report)
+    if rc == 0 and args.attribute:
+        runs = storage.list_runs()
+        if runs:
+            rc = attribute_one(runs[0]["id"], args.seeds)
+    return rc
 
 
 if __name__ == "__main__":
