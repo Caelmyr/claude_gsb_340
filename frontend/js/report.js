@@ -21,6 +21,42 @@ function render(rpt) {
   const events = (rpt.events || []).slice().reverse().map((e) => `
     <tr><td>${e.step}</td><td>${esc(e.type)}</td><td class="muted small">${esc((e.result && e.result.reason) || "")}</td></tr>`).join("");
 
+  const attr = rpt.attribution;
+  const EFF = { strong: "强有效", effective: "有效", weak: "弱效果",
+                none: "基本无效", adverse: "反效果" };
+  const attrCard = attr ? `
+    <div class="card">
+      <div class="row between">
+        <h2 style="margin:0">干预归因（${esc(attr.primary_metric || "")}）</h2>
+        <a class="btn small" href="/attribution.html?run=${encodeURIComponent(rpt.run_id)}">查看完整归因分析 →</a>
+      </div>
+      <p class="muted small" style="margin:8px 0">
+        无干预基线 ${fmt(attr.baseline_mean)} → 全干预叠加 ${fmt(attr.full_mean)}，
+        合计改善 ${fmt(attr.total_benefit_mean)}；
+        ${attr.method === "exact" ? "全子集精确 Shapley" : "排列抽样 Shapley"}，
+        ${attr.replicates} 组随机种子。
+      </p>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>排名</th><th>干预</th><th class="num">施加步</th>
+          <th class="num">Shapley 贡献</th><th class="num">占基线</th>
+          <th class="num">方向一致率</th><th>判定</th></tr></thead>
+        <tbody>${attr.ranking.map((r, k) => `
+          <tr><td>${k + 1}</td><td>${esc(r.label)}</td>
+            <td class="num">${r.step ?? "—"}</td>
+            <td class="num">${fmt(r.shapley_mean)}</td>
+            <td class="num">${fmt(r.pct_of_baseline, 1)}%</td>
+            <td class="num">${fmt(r.benefit_rate * 100, 0)}%</td>
+            <td>${esc(EFF[r.effect_class] || r.effect_class)}</td></tr>`).join("")}
+        </tbody>
+      </table></div>
+    </div>` : `
+    <div class="card">
+      <h2>干预归因</h2>
+      <p class="muted small">尚未进行归因分析。
+        <a href="/attribution.html?run=${encodeURIComponent(rpt.run_id)}">前往「干预归因」页</a>
+        通过反事实重模拟量化每项干预的贡献、起效时刻与相互作用。</p>
+    </div>`;
+
   el("reportBody").innerHTML = `
     <div class="card">
       <div class="row between">
@@ -37,6 +73,8 @@ function render(rpt) {
       <h2>结论摘要</h2>
       <ul style="margin:0;padding-left:18px">${(rpt.summary || []).map((s) => `<li style="margin:6px 0">${esc(s)}</li>`).join("")}</ul>
     </div>
+
+    ${attrCard}
 
     <div class="card">
       <h2>指标统计</h2>

@@ -66,6 +66,7 @@ async function loadEvents() {
 async function loadAll() {
   runMeta = await get(`/api/runs/${runId}`);
   el("runInfo").textContent = `${runMeta.name} · ${DOMAIN_LABEL[runMeta.domain]} · ${MODEL_LABEL[runMeta.model]} · 第 ${runMeta.current_step} 步 · ${runMeta.status}`;
+  el("attrLink").href = `/attribution.html?run=${encodeURIComponent(runId)}`;
   renderForms();
   renderScheduled();
   await loadEvents();

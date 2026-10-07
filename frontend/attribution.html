@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>干预归因 · 复杂系统模拟仿真平台</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="topnav" id="topnav"></nav>
+  <main class="container">
+    <h1 class="page-title">干预归因</h1>
+    <p class="page-sub">通过反事实重模拟与 Shapley 分解，量化每项干预各自贡献了多少、何时起效、是否相互放大或抵消，并在多个随机种子下检验结论稳定性。</p>
+
+    <div class="card">
+      <div class="row">
+        <select id="runSelect" style="max-width:420px"></select>
+        <label class="muted small">随机种子重复次数
+          <input type="number" id="replicates" min="1" max="12" value="6"
+                 style="width:64px; padding:4px 6px; background:var(--bg-2); color:var(--text); border:1px solid var(--border); border-radius:4px">
+        </label>
+        <button class="btn primary" id="runBtn">运行归因分析</button>
+        <button class="btn small" id="exportBtn" disabled>下载归因 CSV</button>
+        <button class="btn small" id="refreshBtn">刷新状态</button>
+      </div>
+      <p class="muted small" id="runInfo" style="margin:10px 0 0"></p>
+      <p class="muted small" id="jobInfo" style="margin:6px 0 0"></p>
+    </div>
+
+    <div id="result" style="display:none">
+      <div class="card" id="validationCard"></div>
+      <div class="card">
+        <h2>归因结论</h2>
+        <ul id="summary" style="margin:0;padding-left:18px"></ul>
+      </div>
+
+      <div class="card">
+        <h2>反事实轨迹对照</h2>
+        <p class="muted small" id="chartHint"></p>
+        <div id="chart" style="width:100%;height:420px"></div>
+      </div>
+
+      <div class="card">
+        <h2>干预 — 效果对照表与归因排序</h2>
+        <div class="row" style="margin-bottom:8px">
+          <label class="muted small">指标：
+            <select id="metricSelect"
+                    style="padding:4px 6px; background:var(--bg-2); color:var(--text); border:1px solid var(--border); border-radius:4px"></select>
+          </label>
+        </div>
+        <div style="overflow-x:auto"><table id="attribTable"></table></div>
+        <p class="muted small" id="tableHint"></p>
+      </div>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h2>何时开始起效</h2>
+          <p class="muted small" id="onsetRule"></p>
+          <div style="overflow-x:auto"><table id="onsetTable"></table></div>
+        </div>
+        <div class="card">
+          <h2>干预间相互作用</h2>
+          <div style="overflow-x:auto"><table id="interTable"></table></div>
+          <p class="muted small">协同项 &gt; 0：两者一起用比单独用效果之和更大（放大）；&lt; 0：效果重叠 / 抵消。精确模式另给出二阶 Shapley 交互指数。</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>方法与口径说明</h2>
+        <div id="methodInfo" class="muted small mono"></div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/vendor/echarts.min.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/attribution.js"></script>
+</body>
+</html>

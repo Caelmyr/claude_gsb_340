@@ -171,6 +171,63 @@ EPIDEMIC_METRICS = [
 ]
 
 # --------------------------------------------------------------------------- #
+# Attribution metrics (counterfactual analysis targets per domain)
+#
+# Each entry describes one headline quantity derived from a run's time series.
+# ``direction`` says which way is "better" so benefit can be signed regardless
+# of domain: down = smaller is better (infections, congestion), up = larger is
+# better (speed, prey population), info = neutral timing/reference quantity
+# (reported but excluded from benefit rankings).  ``onset`` marks the series
+# used to decide when an intervention "starts working".
+# --------------------------------------------------------------------------- #
+EPIDEMIC_ATTRIBUTION_METRICS = [
+    {"key": "peak_infected", "label": "感染峰值 Iₘₐₓ", "direction": "down",
+     "derived": True, "primary": True},
+    {"key": "total_infected", "label": "累计感染（最终 R+I）", "direction": "down",
+     "derived": True},
+    {"key": "auc_infected", "label": "感染总负担 ΣI", "direction": "down",
+     "derived": True},
+    {"key": "new_infections", "label": "新增感染（即时）", "direction": "down",
+     "onset": True},
+    {"key": "infected", "label": "现存感染（即时）", "direction": "down",
+     "onset": True},
+    {"key": "peak_step", "label": "峰值出现时刻", "direction": "info"},
+    {"key": "end_infected", "label": "末期现存感染", "direction": "down"},
+]
+
+TRAFFIC_ATTRIBUTION_METRICS = [
+    {"key": "mean_speed", "label": "平均速度", "direction": "up", "onset": True,
+     "primary": True},
+    {"key": "stopped", "label": "停车比例", "direction": "down", "onset": True},
+    {"key": "flow", "label": "累计流量", "direction": "up", "derived": True},
+]
+
+ECOLOGY_ATTRIBUTION_METRICS = [
+    {"key": "rabbits_mean", "label": "兔子平均种群", "direction": "up",
+     "derived": True, "primary": True},
+    {"key": "rabbits_min", "label": "兔子最低数量", "direction": "up",
+     "derived": True},
+    {"key": "grass_coverage", "label": "末期草地覆盖", "direction": "up"},
+    {"key": "rabbits", "label": "兔子数量（即时）", "direction": "up",
+     "onset": True},
+    {"key": "foxes_mean", "label": "狐狸平均种群", "direction": "info",
+     "derived": True},
+]
+
+ECOLOGY_ABM_ATTRIBUTION_METRICS = [
+    {"key": "boids_mean", "label": "鸟群平均数量", "direction": "up",
+     "derived": True, "primary": True},
+    {"key": "boids_min", "label": "鸟群最低数量", "direction": "up",
+     "derived": True},
+    {"key": "total_eaten", "label": "累计被捕食", "direction": "down",
+     "derived": True},
+    {"key": "boids", "label": "鸟群数量（即时）", "direction": "up",
+     "onset": True},
+    {"key": "predators_mean", "label": "捕食者平均数量", "direction": "info",
+     "derived": True},
+]
+
+# --------------------------------------------------------------------------- #
 # Assembled catalog
 # --------------------------------------------------------------------------- #
 CATALOG: Dict[str, Dict[str, Any]] = {
@@ -185,6 +242,7 @@ CATALOG: Dict[str, Dict[str, Any]] = {
         },
         "interventions": TRAFFIC_INTERVENTIONS,
         "metrics": TRAFFIC_METRICS,
+        "attribution_metrics": TRAFFIC_ATTRIBUTION_METRICS,
     },
     "ecology": {
         "label": "生态",
@@ -197,6 +255,8 @@ CATALOG: Dict[str, Dict[str, Any]] = {
         },
         "interventions": ECOLOGY_INTERVENTIONS,
         "metrics": ECOLOGY_METRICS,
+        "attribution_metrics": ECOLOGY_ATTRIBUTION_METRICS,
+        "attribution_metrics_abm": ECOLOGY_ABM_ATTRIBUTION_METRICS,
     },
     "epidemic": {
         "label": "传染病",
@@ -209,6 +269,7 @@ CATALOG: Dict[str, Dict[str, Any]] = {
         },
         "interventions": EPIDEMIC_INTERVENTIONS,
         "metrics": EPIDEMIC_METRICS,
+        "attribution_metrics": EPIDEMIC_ATTRIBUTION_METRICS,
     },
 }
 
@@ -240,6 +301,21 @@ def interventions(domain: str) -> List[Dict[str, Any]]:
 
 def metric_labels(domain: str) -> Dict[str, str]:
     return {m["key"]: m["label"] for m in CATALOG[domain]["metrics"]}
+
+
+def attribution_metrics(domain: str, model: str = "") -> List[Dict[str, Any]]:
+    """Metric specs used by the intervention-attribution counterfactual study."""
+    info = CATALOG[domain]
+    if model == "abm" and info.get("attribution_metrics_abm"):
+        return info["attribution_metrics_abm"]
+    return info.get("attribution_metrics", [])
+
+
+def intervention_label(domain: str, itv_type: str) -> str:
+    for spec in CATALOG[domain]["interventions"]:
+        if spec["type"] == itv_type:
+            return spec["label"]
+    return itv_type
 
 
 def known_domain(domain: str) -> bool:

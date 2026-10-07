@@ -16,7 +16,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend import models, report, storage  # noqa: E402
+from backend import attribution, models, report, storage  # noqa: E402
 from backend.engine import make_engine  # noqa: E402
 from backend.run_manager import manager  # noqa: E402
 
@@ -98,11 +98,54 @@ def run_lifecycle() -> None:
         manager.delete_run(rid)
 
 
+def attribution_shapley() -> None:
+    scene = models.Scene(domain="epidemic", model="abm",
+                         config={"n": 300, "width": 300, "height": 300,
+                                 "initial_infected": 10, "beta": 0.45,
+                                 "gamma": 0.06, "speed": 2.5, "radius": 7.0},
+                         interventions=[
+                             {"type": "lockdown", "params": {"scale": 0.7},
+                              "at_step": 20},
+                             {"type": "mask", "params": {"scale": 0.5},
+                              "at_step": 35},
+                         ])
+    meta = manager.create_run(scene, seed=11, snapshot_interval=400)
+    rid = meta["id"]
+    try:
+        manager.run_batch(rid, 150, keep_engine=True)
+        doc = attribution.run_attribution(rid, replicates=3)
+        # The full-coalition replay at the run's own seed must reproduce it.
+        assert doc["validation"]["verified"], doc["validation"]
+        # Exact Shapley decomposition: contributions sum to total benefit.
+        block = next(b for b in doc["metrics"]
+                     if b["key"] == "total_infected")
+        total = abs(block["total_benefit_mean"])
+        if total > 1e-9:
+            residual = abs(block["decomposition_residual"])
+            assert residual < 1e-6, f"shapley residual {residual}"
+        # Every instance is present and ranked, onset rows keyed correctly.
+        assert len(doc["instances"]) == 2
+        assert len(block["ranking"]) == 2
+        assert {r["id"] for r in block["ranking"]} == {"itv1", "itv2"}
+        assert all(0.0 <= r["benefit_rate"] <= 1.0
+                   for r in block["ranking"])
+        # Onset rule output is well-formed.
+        primary = [r for r in doc["onset"] if r["primary"]]
+        assert primary
+        for r in primary:
+            assert r["lag_median"] is None or r["lag_median"] >= 0
+        # Persisted to disk.
+        assert storage.load_attribution(rid)["run_id"] == rid
+    finally:
+        manager.delete_run(rid)
+
+
 def main() -> None:
     check("six engines step and snapshot", engines_step)
     check("interventions apply", interventions_apply)
     check("atomic sharded storage", storage_atomic_roundtrip)
     check("run lifecycle + report", run_lifecycle)
+    check("intervention attribution (Shapley)", attribution_shapley)
     print("\nall smoke tests passed")
 
 

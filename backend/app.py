@@ -14,7 +14,7 @@ from typing import Any, Dict
 
 from flask import Flask, jsonify, request, send_file, send_from_directory
 
-from . import catalog, export, models, report, storage, util
+from . import attribution, catalog, export, models, report, storage, util
 from .run_manager import manager
 
 FRONTEND_DIR = os.path.join(
@@ -322,6 +322,45 @@ def create_app() -> Flask:
             return jsonify(report.generate_report(run_id))
         except KeyError as exc:
             return _err(exc, 404)
+
+    # ------------------------------------------------------------------ #
+    # Intervention attribution (counterfactual / Shapley analysis)
+    # ------------------------------------------------------------------ #
+    @app.route("/api/runs/<run_id>/attribution", methods=["GET"])
+    def get_attribution(run_id: str):
+        payload = storage.load_attribution(run_id)
+        job = attribution.job_status(run_id)
+        if payload is None and job is None:
+            return _err(KeyError("attribution not found: run the analysis first"),
+                        404)
+        if job and job["status"] == "running":
+            return jsonify({"status": "running", "job": job})
+        if job and job["status"] == "error" and payload is None:
+            return _err(RuntimeError(job.get("error", "analysis failed")), 400)
+        if payload is None:
+            return _err(KeyError("attribution not found"), 404)
+        out = dict(payload)
+        if job:
+            out["job"] = job
+        return jsonify(out)
+
+    @app.route("/api/runs/<run_id>/attribution", methods=["POST"])
+    def create_attribution(run_id: str):
+        if storage.load_run_meta(run_id) is None:
+            return _err(KeyError(f"run not found: {run_id}"), 404)
+        data = _json()
+        replicates = int(data.get("replicates", attribution.DEFAULT_REPLICATES))
+        background = bool(data.get("background", True))
+        try:
+            if background:
+                job = attribution.start_attribution(run_id, replicates)
+                return jsonify({"status": "running", "job": job}), 202
+            payload = attribution.run_attribution(run_id, replicates)
+            return jsonify(payload)
+        except KeyError as exc:
+            return _err(exc, 404)
+        except ValueError as exc:
+            return _err(exc, 400)
 
     # ------------------------------------------------------------------ #
     # Export

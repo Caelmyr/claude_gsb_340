@@ -104,8 +104,51 @@ def generate_report(run_id: str) -> Dict[str, Any]:
         "summary": _narrative(domain, metrics, len(series)),
         "generated_at": util.now_iso(),
     }
+    # Attach a compact attribution pointer/summary if an analysis exists, so
+    # the report page can surface "which intervention actually mattered"
+    # without recomputing counterfactual replays.
+    attribution_doc = storage.load_attribution(run_id)
+    if attribution_doc is not None:
+        report["attribution"] = _attribution_digest(attribution_doc)
     storage.save_report(run_id, report)
     return report
+
+
+def _attribution_digest(doc: Dict[str, Any]) -> Dict[str, Any]:
+    """Compact attribution excerpt embedded in the report."""
+    primary = next((m for m in doc.get("metrics", [])
+                    if m.get("primary") and m.get("ranking")), None)
+    ranking = []
+    if primary:
+        for row in primary["ranking"]:
+            inst = next((i for i in doc["instances"]
+                         if i["id"] == row["id"]), {})
+            ranking.append({
+                "label": inst.get("label", row["id"]),
+                "step": inst.get("step"),
+                "shapley_mean": row["shapley_mean"],
+                "pct_of_baseline": row["pct_of_baseline"],
+                "benefit_rate": row["benefit_rate"],
+                "effect_class": row["effect_class"],
+            })
+    primary_onset = [{"id": r["id"],
+                      "onset_step_median": r["onset_step_median"],
+                      "lag_median": r["lag_median"],
+                      "detection_rate": r["detection_rate"]}
+                     for r in doc.get("onset", []) if r.get("primary")]
+    return {
+        "generated_at": doc.get("generated_at"),
+        "replicates": doc.get("params", {}).get("replicates"),
+        "method": doc.get("params", {}).get("method"),
+        "primary_metric": primary["label"] if primary else None,
+        "baseline_mean": primary.get("baseline_mean") if primary else None,
+        "full_mean": primary.get("full_mean") if primary else None,
+        "total_benefit_mean": primary.get("total_benefit_mean")
+        if primary else None,
+        "ranking": ranking,
+        "onset": primary_onset,
+        "summary": doc.get("summary", []),
+    }
 
 
 def load_report(run_id: str) -> Dict[str, Any]:

@@ -152,6 +152,10 @@ def run_report_path(run_id: str) -> str:
     return os.path.join(run_dir(run_id), "report.json")
 
 
+def run_attribution_path(run_id: str) -> str:
+    return os.path.join(run_dir(run_id), "attribution.json")
+
+
 def run_steps_dir(run_id: str) -> str:
     return os.path.join(run_dir(run_id), "steps")
 
@@ -252,6 +256,14 @@ def save_report(run_id: str, report: Dict[str, Any]) -> None:
 
 def load_report(run_id: str) -> Optional[Dict[str, Any]]:
     return read_json(run_report_path(run_id))
+
+
+def save_attribution(run_id: str, payload: Dict[str, Any]) -> None:
+    atomic_write_json(run_attribution_path(run_id), payload)
+
+
+def load_attribution(run_id: str) -> Optional[Dict[str, Any]]:
+    return read_json(run_attribution_path(run_id))
 
 
 # --------------------------------------------------------------------------- #
